@@ -34,6 +34,19 @@ dragging_slider = False  # Slider dragging state
 # Add object mode: "star" or "planet"
 current_mode = "star"
 
+def mass_to_color(mass):
+    if mass < 1 * MASS_COLOR_SCALE:
+        return (255, int(255 * (mass / MASS_COLOR_SCALE)), 0)  # Red → Orange
+    elif mass < 2 * MASS_COLOR_SCALE:
+        return (255 - int(255 * ((mass - MASS_COLOR_SCALE) / MASS_COLOR_SCALE)), 255, 0)  # Orange → Yellow
+    elif mass < 3 * MASS_COLOR_SCALE:
+        return (0, 255, int(255 * ((mass - 2 * MASS_COLOR_SCALE) / MASS_COLOR_SCALE)))  # Yellow → Green
+    elif mass < 4 * MASS_COLOR_SCALE:
+        return (0, 255 - int(255 * ((mass - 3 * MASS_COLOR_SCALE) / MASS_COLOR_SCALE)), 255)  # Green → Cyan
+    else:
+        return (0, 0, 255)  # Blue (Max Mass)
+
+
 def compute_forces(bodies):
     forces = []
     for i, body1 in enumerate(bodies):
@@ -54,18 +67,25 @@ def update_bodies(bodies, forces):
         body["state"][2:] += acceleration * TIMESTEP  # Update velocity
         body["state"][:2] += body["state"][2:] * TIMESTEP  # Update position
 
+def calculate_dynamic_radius(mass):
+    """Calculate the radius dynamically based on mass and the current scale."""
+    base_radius = max(5, int(mass * MASS_RADIUS_SCALE))
+    scaled_radius = int(base_radius * (1e9 / SCALE))
+    return max(1, scaled_radius)  # Ensure radius doesn't go to 0
+
 def draw_bodies(screen, bodies, preview_data=None):
     screen.fill((0, 0, 0))  # Black background
     for body in bodies:
         x, y = (body["state"][:2] - camera_offset) / SCALE + np.array([WIDTH // 2, HEIGHT // 2])
         x, y = int(x), int(y)
         if 0 <= x < WIDTH and 0 <= y < HEIGHT:
-            pygame.draw.circle(screen, body["color"], (x, y), body["radius"])
+            radius = calculate_dynamic_radius(body["mass"])
+            pygame.draw.circle(screen, body["color"], (x, y), radius)
     
     # Draw preview (if any)
     if preview_data:
         pos, velocity, mass = preview_data
-        radius = max(5, int(mass * MASS_RADIUS_SCALE))
+        radius = calculate_dynamic_radius(mass)
         color = mass_to_color(mass)
         pygame.draw.circle(screen, color, pos, radius)
         drag_end = (pos[0] + velocity[0] / 1e3, pos[1] + velocity[1] / 1e3)
@@ -76,44 +96,32 @@ def draw_bodies(screen, bodies, preview_data=None):
     pygame.draw.rect(screen, (0, 255, 0), slider_thumb_rect)  # Slider thumb
     pygame.display.flip()
 
-def mass_to_color(mass):
-    if mass < 1 * MASS_COLOR_SCALE:
-        return (255, int(255 * (mass / MASS_COLOR_SCALE)), 0)  # Red → Orange
-    elif mass < 2 * MASS_COLOR_SCALE:
-        return (255 - int(255 * ((mass - MASS_COLOR_SCALE) / MASS_COLOR_SCALE)), 255, 0)  # Orange → Yellow
-    elif mass < 3 * MASS_COLOR_SCALE:
-        return (0, 255, int(255 * ((mass - 2 * MASS_COLOR_SCALE) / MASS_COLOR_SCALE)))  # Yellow → Green
-    elif mass < 4 * MASS_COLOR_SCALE:
-        return (0, 255 - int(255 * ((mass - 3 * MASS_COLOR_SCALE) / MASS_COLOR_SCALE)), 255)  # Green → Cyan
-    else:
-        return (0, 0, 255)  # Blue (Max Mass)
-
 def add_body(position, velocity, mode, mass=None):
     global focused_body_index
     if mode == "star":
         mass = mass if mass else PROXIMA_MIN_MASS
-        radius = max(5, int(mass * MASS_RADIUS_SCALE))  # Scale radius based on mass
-        color = mass_to_color(mass)  # Scale color based on mass
         bodies.append({
             "mass": mass,
             "state": np.array([(position[0] - WIDTH // 2) * SCALE + camera_offset[0], 
                                (position[1] - HEIGHT // 2) * SCALE + camera_offset[1], 
                                velocity[0], velocity[1]]),  # Position and velocity
-            "color": color,
-            "radius": radius
+            "color": mass_to_color(mass),
+            "radius": calculate_dynamic_radius(mass)  # Dynamic radius
         })
     elif mode == "planet":
+        mass = 5.972e24  # Earth-like planet mass
         bodies.append({
-            "mass": 5.972e24,  # Planet-like mass
+            "mass": mass,
             "state": np.array([(position[0] - WIDTH // 2) * SCALE + camera_offset[0], 
                                (position[1] - HEIGHT // 2) * SCALE + camera_offset[1], 
                                velocity[0], velocity[1]]),  # Position and velocity
             "color": (200, 200, 0),  # Yellowish
-            "radius": 5
+            "radius": calculate_dynamic_radius(mass)  # Dynamic radius
         })
 
-    # Update focus to the newly added body
     focused_body_index = len(bodies) - 1  # Focus on the last added body
+
+
 
 # Main simulation loop
 running = True

@@ -205,7 +205,17 @@ while running:
             elif event.key == pygame.K_c:  # Switch to star mode
                 current_mode = "star"
             elif event.key == pygame.K_TAB:  # Toggle focus between bodies
-                focused_body_index = (focused_body_index + 1) % len(bodies) if bodies else -1
+                if bodies:  # Ensure there are bodies to focus on
+                    start_index = focused_body_index  # Remember the starting point
+                    while True:
+                        focused_body_index = (focused_body_index + 1) % len(bodies)
+                        # Check if the current body matches the desired type
+                        if bodies[focused_body_index]["type"] == current_mode:
+                            break
+                        # If we've looped through all bodies and found none, stop
+                        if focused_body_index == start_index:
+                            focused_body_index = -1  # No matching body found
+                            break
             elif event.key == pygame.K_u:  # Unfocus the camera
                 focused_body_index = -1
             elif event.key == pygame.K_x:  # Delete the focused body

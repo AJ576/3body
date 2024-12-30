@@ -36,15 +36,24 @@ current_mode = "star"
 
 def mass_to_color(mass):
     if mass < 1 * MASS_COLOR_SCALE:
-        return (255, int(255 * (mass / MASS_COLOR_SCALE)), 0)  # Red → Orange
+        # Red → Orange
+        return (255, int(165 * (mass / MASS_COLOR_SCALE)), 0)  
     elif mass < 2 * MASS_COLOR_SCALE:
-        return (255 - int(255 * ((mass - MASS_COLOR_SCALE) / MASS_COLOR_SCALE)), 255, 0)  # Orange → Yellow
+        # Orange → Yellow
+        return (255, 165 + int(90 * ((mass - MASS_COLOR_SCALE) / MASS_COLOR_SCALE)), 0)
     elif mass < 3 * MASS_COLOR_SCALE:
-        return (0, 255, int(255 * ((mass - 2 * MASS_COLOR_SCALE) / MASS_COLOR_SCALE)))  # Yellow → Green
+        # Yellow → White
+        green = 255
+        blue = int(255 * ((mass - 2 * MASS_COLOR_SCALE) / MASS_COLOR_SCALE))
+        return (255, green, blue)
     elif mass < 4 * MASS_COLOR_SCALE:
-        return (0, 255 - int(255 * ((mass - 3 * MASS_COLOR_SCALE) / MASS_COLOR_SCALE)), 255)  # Green → Cyan
+        # White → Blue
+        red = 255 - int(255 * ((mass - 3 * MASS_COLOR_SCALE) / MASS_COLOR_SCALE))
+        return (red, 255, 255)
     else:
-        return (0, 0, 255)  # Blue (Max Mass)
+        # Max mass: Pure Blue
+        return (0, 0, 255)
+
 
 
 def compute_forces(bodies):
@@ -69,7 +78,7 @@ def update_bodies(bodies, forces):
 
 def calculate_dynamic_radius(mass):
     """Calculate the radius dynamically based on mass and the current scale."""
-    base_radius = max(5, int(mass * MASS_RADIUS_SCALE))
+    base_radius = max(1, int(mass * MASS_RADIUS_SCALE))
     scaled_radius = int(base_radius * (1e9 / SCALE))
     return max(1, scaled_radius)  # Ensure radius doesn't go to 0
 
@@ -193,12 +202,25 @@ while running:
                 TIMESTEP = (slider_thumb_rect.x - slider_rect.left) * 100  # Adjust time step
             elif click_position:
                 hold_duration = time.time() - mouse_down_time
-                preview_mass = PROXIMA_MIN_MASS + hold_duration * 1e30  # Increment mass with time held
+                if current_mode == "star":
+                    preview_mass = PROXIMA_MIN_MASS + hold_duration * 7e29  # Increment mass with time held
+                else:
+                    preview_mass = 5.972e24
                 drag_position = event.pos
-                preview_velocity = ((drag_position[0] - click_position[0]) * 1e3, 
-                                     (drag_position[1] - click_position[1]) * 1e3)
+                 # Calculate drag velocity relative to focused body
+                raw_velocity = ((drag_position[0] - click_position[0]) * 1e3, 
+                                (drag_position[1] - click_position[1]) * 1e3)
+                
+                if focused_body_index != -1:
+                    focused_body_velocity = bodies[focused_body_index]["state"][2:4]  # Get velocity of the focused body
+                    preview_velocity = (raw_velocity[0] - focused_body_velocity[0],
+                                        raw_velocity[1] - focused_body_velocity[1])
+                else:
+                    preview_velocity = raw_velocity
                 preview_data = (click_position, preview_velocity, preview_mass)  # Prepare preview data
 
+
+                
     if simulation_running and len(bodies) > 0:
         forces = compute_forces(bodies)  # Compute gravitational forces
         update_bodies(bodies, forces)  # Update positions and velocities

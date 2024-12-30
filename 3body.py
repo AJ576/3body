@@ -3,7 +3,7 @@ import numpy as np
 import time
 
 # Constants
-WIDTH, HEIGHT = 800, 800
+WIDTH, HEIGHT = 800, 750
 FPS = 60
 G = 6.6743e-11  # Gravitational constant
 SCALE = 1e9  # Scale factor for positions
@@ -12,7 +12,11 @@ SLIDER_WIDTH = 300
 SLIDER_HEIGHT = 10
 PROXIMA_MIN_MASS = 2.38e29  # Minimum mass of a star (~0.12 solar masses)
 MASS_RADIUS_SCALE = 1e-29  # Scale factor for radius
+PLANET_MASS_RADIUS_SCALE = 5e-28  # Scale factor for radius
 MASS_COLOR_SCALE = 1e30  # Scale factor for color transitions
+
+PLUTO_MIN_MASS = 1.31e22  # Minimum mass of a planet (Pluto)
+JUPITER_MAX_MASS = 1.898e27 # Maximum mass of a planet (Jupiter)
 
 # Initial bodies
 bodies = []
@@ -25,6 +29,7 @@ pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Interactive Three-Body Simulation")
 clock = pygame.time.Clock()
+font = pygame.font.SysFont("Arial", 16)
 
 # Slider setup
 slider_rect = pygame.Rect(WIDTH // 2 - SLIDER_WIDTH // 2, HEIGHT - 50, SLIDER_WIDTH, SLIDER_HEIGHT)
@@ -78,23 +83,39 @@ def update_bodies(bodies, forces):
 
 def calculate_dynamic_radius(mass):
     """Calculate the radius dynamically based on mass and the current scale."""
-    base_radius = max(1, int(mass * MASS_RADIUS_SCALE))
-    scaled_radius = int(base_radius * (1e9 / SCALE))
-    return max(1, scaled_radius)  # Ensure radius doesn't go to 0
+    base_radius = max(1, int(mass * MASS_RADIUS_SCALE))  # Radius based on mass
+    scaled_radius = base_radius / (SCALE / 1e9)  # Adjust radius based on zoom level
+    return max(2, int(scaled_radius))  # Ensure radius doesn't go to 0
+
+def calculate_dynamic_radius_planet(mass):
+    """Calculate the radius dynamically for planets."""
+    base_radius = mass * PLANET_MASS_RADIUS_SCALE # Radius based on mass
+    scaled_radius = base_radius / (SCALE / 1e9)  # Adjust radius based on zoom level
+    return max(2, int(scaled_radius))  # Ensure radius doesn't go to 0
+
 
 def draw_bodies(screen, bodies, preview_data=None):
     screen.fill((0, 0, 0))  # Black background
     for body in bodies:
         x, y = (body["state"][:2] - camera_offset) / SCALE + np.array([WIDTH // 2, HEIGHT // 2])
         x, y = int(x), int(y)
-        if 0 <= x < WIDTH and 0 <= y < HEIGHT:
-            radius = calculate_dynamic_radius(body["mass"])
+
+        radius = calculate_dynamic_radius(body["mass"])
+        # Ensure the object is drawn until the entire circle is out of the screen borders
+        if -radius <= x < WIDTH + radius and -radius <= y < HEIGHT + radius:
+            if body["type"] == "planet":
+                radius = calculate_dynamic_radius_planet(body["mass"])
+            else:   
+                radius = calculate_dynamic_radius(body["mass"])
             pygame.draw.circle(screen, body["color"], (x, y), radius)
     
     # Draw preview (if any)
     if preview_data:
         pos, velocity, mass = preview_data
-        radius = calculate_dynamic_radius(mass)
+        if current_mode == "planet":
+            radius = calculate_dynamic_radius_planet(mass)
+        else:   
+            radius = calculate_dynamic_radius(mass)
         color = mass_to_color(mass)
         pygame.draw.circle(screen, color, pos, radius)
         drag_end = (pos[0] + velocity[0] / 1e3, pos[1] + velocity[1] / 1e3)
@@ -103,6 +124,25 @@ def draw_bodies(screen, bodies, preview_data=None):
     # Draw the slider
     pygame.draw.rect(screen, (255, 255, 255), slider_rect)  # Slider background
     pygame.draw.rect(screen, (0, 255, 0), slider_thumb_rect)  # Slider thumb
+
+
+    if focused_body_index != -1:
+        focused_body = bodies[focused_body_index]
+        mass_text = font.render(f"Mass: {focused_body['mass']:.2e} kg", True, (255, 255, 255))
+        velocity_text = font.render(f"Velocity: ({focused_body['state'][2]:.2f}, {focused_body['state'][3]:.2f}) m/s", True, (255, 255, 255))
+        type_text = font.render(f"Type: {'Star' if focused_body['mass'] >= PROXIMA_MIN_MASS else 'Planet'}", True, (255, 255, 255))
+        
+        screen.blit(mass_text, (WIDTH - 300, 10))
+        screen.blit(velocity_text, (WIDTH - 300, 30))
+        screen.blit(type_text, (WIDTH - 300, 50))
+    if preview_data:
+        mass_text = font.render(f"Body in creation: Mass: {preview_data[2]:.2e} kg", True, (255, 255, 255))
+        screen.blit(mass_text, (10, 10))
+        if focused_body_index == -1:
+            mass_text = font.render("Body in creation: Mass: ", True, (255, 255, 255))
+            screen.blit(mass_text, (10, 10))
+    scale = font.render(f"Scale: {SCALE:.2e} m", True, (255, 255, 255))
+    screen.blit(scale, (10, HEIGHT - 20))
     pygame.display.flip()
 
 def add_body(position, velocity, mode, mass=None):
@@ -115,17 +155,19 @@ def add_body(position, velocity, mode, mass=None):
                                (position[1] - HEIGHT // 2) * SCALE + camera_offset[1], 
                                velocity[0], velocity[1]]),  # Position and velocity
             "color": mass_to_color(mass),
-            "radius": calculate_dynamic_radius(mass)  # Dynamic radius
+            "radius": calculate_dynamic_radius(mass),  # Dynamic radius
+            "type":"star"
         })
     elif mode == "planet":
-        mass = 5.972e24  # Earth-like planet mass
+        mass = min(JUPITER_MAX_MASS, mass)
         bodies.append({
             "mass": mass,
             "state": np.array([(position[0] - WIDTH // 2) * SCALE + camera_offset[0], 
                                (position[1] - HEIGHT // 2) * SCALE + camera_offset[1], 
                                velocity[0], velocity[1]]),  # Position and velocity
             "color": (200, 200, 0),  # Yellowish
-            "radius": calculate_dynamic_radius(mass)  # Dynamic radius
+            "radius": calculate_dynamic_radius_planet(mass),  # Dynamic radius
+            "type":"planet"
         })
 
     focused_body_index = len(bodies) - 1  # Focus on the last added body
@@ -171,9 +213,9 @@ while running:
                     del bodies[focused_body_index]
                     focused_body_index = -1  # Unfocus after deletion
             elif event.key == pygame.K_EQUALS:  # Zoom in
-                SCALE = max(SCALE / 1.1, 1e7)  # Clamp to a minimum scale
+                SCALE = max(SCALE / 1.1, 1e3)  # Clamp to a minimum scale
             elif event.key == pygame.K_MINUS:  # Zoom out
-                SCALE = min(SCALE * 1.1, 1e12)  # Clamp to a maximum scale
+                SCALE = min(SCALE * 1.1, 1e11)  # Clamp to a maximum scale
 
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -189,10 +231,20 @@ while running:
                 if dragging_slider:
                     dragging_slider = False
                 elif click_position:
-                    # Calculate velocity based on drag
+    # Calculate velocity based on drag
                     release_position = event.pos
-                    velocity = ((release_position[0] - click_position[0]) * 1e3, 
-                                (release_position[1] - click_position[1]) * 1e3)
+                    raw_velocity = ((release_position[0] - click_position[0]) * 1e3, 
+                                    (release_position[1] - click_position[1]) * 1e3)
+
+                    # Adjust for relative velocity if a body is focused
+                    if focused_body_index != -1:
+                        focused_body_velocity = bodies[focused_body_index]["state"][2:4]
+                        velocity = (raw_velocity[0] + focused_body_velocity[0], 
+                                    raw_velocity[1] + focused_body_velocity[1])  # Add focus velocity
+                    else:
+                        velocity = raw_velocity
+
+                    # Add the new body
                     add_body(click_position, velocity, current_mode, preview_mass)
                     click_position = None
         elif event.type == pygame.MOUSEMOTION:
@@ -203,21 +255,30 @@ while running:
             elif click_position:
                 hold_duration = time.time() - mouse_down_time
                 if current_mode == "star":
-                    preview_mass = PROXIMA_MIN_MASS + hold_duration * 7e29  # Increment mass with time held
+                    preview_mass = PROXIMA_MIN_MASS + hold_duration * 3e29  # Increment mass with time held
                 else:
-                    preview_mass = 5.972e24
+                    max_hold_time = 15  # Time in seconds to reach max mass
+                    mass_range = JUPITER_MAX_MASS - PLUTO_MIN_MASS
+
+                    # Use a quadratic scaling for smoother and slower initial growth
+                    progress = min(hold_duration / max_hold_time, 1)  # Progress normalized between 0 and 1
+                    scaled_increment = mass_range * (progress ** 4)  # Quadratic growth for gradual scaling
+                    
+                    # Update the preview mass, capping it at Jupiter's max mass
+                    preview_mass = min(PLUTO_MIN_MASS + scaled_increment, JUPITER_MAX_MASS)
                 drag_position = event.pos
-                 # Calculate drag velocity relative to focused body
                 raw_velocity = ((drag_position[0] - click_position[0]) * 1e3, 
                                 (drag_position[1] - click_position[1]) * 1e3)
-                
+
+                # Relative velocity calculation
                 if focused_body_index != -1:
-                    focused_body_velocity = bodies[focused_body_index]["state"][2:4]  # Get velocity of the focused body
-                    preview_velocity = (raw_velocity[0] - focused_body_velocity[0],
-                                        raw_velocity[1] - focused_body_velocity[1])
+                    focused_body_velocity = bodies[focused_body_index]["state"][2:4]
+                    preview_velocity = (raw_velocity[0], raw_velocity[1])  # Start preview line at 0
                 else:
                     preview_velocity = raw_velocity
-                preview_data = (click_position, preview_velocity, preview_mass)  # Prepare preview data
+
+                # Prepare preview data
+                preview_data = (click_position, preview_velocity, preview_mass)
 
 
                 

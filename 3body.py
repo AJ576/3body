@@ -208,13 +208,16 @@ while running:
                 if bodies:  # Ensure there are bodies to focus on
                     start_index = focused_body_index  # Remember the starting point
                     while True:
+                        print(f"focus:{focused_body_index}")
+                        print(f"start{start_index}")
                         focused_body_index = (focused_body_index + 1) % len(bodies)
                         # Check if the current body matches the desired type
                         if bodies[focused_body_index]["type"] == current_mode:
                             break
                         # If we've looped through all bodies and found none, stop
-                        if focused_body_index == start_index:
+                        if focused_body_index == start_index or start_index == -1 :
                             focused_body_index = -1  # No matching body found
+                            print("No matching body found")
                             break
             elif event.key == pygame.K_u:  # Unfocus the camera
                 focused_body_index = -1

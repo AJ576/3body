@@ -23,7 +23,6 @@ bodies = []
 simulation_running = False
 camera_offset = np.array([0, 0])  # Offset for camera movement
 focused_body_index = -1  # Index of the currently focused body (-1 means no focus)
-
 # Pygame setup
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -215,16 +214,19 @@ while running:
                         if bodies[focused_body_index]["type"] == current_mode:
                             break
                         # If we've looped through all bodies and found none, stop
-                        if focused_body_index == start_index or start_index == -1 :
+                        if focused_body_index == start_index:
                             focused_body_index = -1  # No matching body found
                             print("No matching body found")
                             break
+                        if start_index == -1:
+                            start_index = 0
             elif event.key == pygame.K_u:  # Unfocus the camera
                 focused_body_index = -1
             elif event.key == pygame.K_x:  # Delete the focused body
                 if focused_body_index != -1:
                     del bodies[focused_body_index]
                     focused_body_index = -1  # Unfocus after deletion
+                    
             elif event.key == pygame.K_EQUALS:  # Zoom in
                 SCALE = max(SCALE / 1.1, 1e3)  # Clamp to a minimum scale
             elif event.key == pygame.K_MINUS:  # Zoom out
